@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hpower PRO | Senior Suite v17.3</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --accent: #38bdf8; }
+        body { background: #0f172a; color: white; font-family: 'Inter', sans-serif; overflow-x: hidden; margin: 0; font-size: 0.85rem; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1); }
+        .view { display: none; min-height: 100vh; padding: 15px; animation: fadeIn 0.3s ease; }
+        @media (min-width: 1024px) { .view { padding: 30px; } }
+        .view.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* SIDEBAR */
+        #sidebar { position: fixed; left: -100%; top: 0; z-index: 1000; transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1); width: 280px; height: 100vh; box-shadow: 20px 0 50px rgba(0,0,0,0.5); }
+        #sidebar.open { left: 0; }
+        .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 900; backdrop-filter: blur(3px); }
+        .overlay.active { display: block; }
+        
+        @media (min-width: 1024px) {
+            #sidebar { position: fixed; left: 0; width: 260px; box-shadow: none; border-right: 1px solid rgba(255,255,255,0.05); }
+            main { margin-left: 260px; }
+            #mobile-header { display: none; }
+            .overlay { display: none !important; }
+        }
+
+        /* INPUTS */
+        input, textarea, select { background: rgba(0,0,0,0.4) !important; border: 1px solid rgba(255,255,255,0.1) !important; color: white !important; outline: none; padding: 0.8rem 1rem !important; font-size: 16px !important; border-radius: 0.8rem !important; width: 100%; }
+        .sidebar-item { transition: 0.2s; cursor: pointer; border-radius: 12px; font-weight: 700; margin-bottom: 6px; padding: 12px 15px; font-size: 14px; }
+        .sidebar-item.active { background: var(--accent); color: black; }
+        
+        #gmailLog { max-height: 450px; overflow-y: auto; }
+        .log-entry { border-left: 4px solid var(--accent); background: rgba(255,255,255,0.05); padding: 15px; border-radius: 0 12px 12px 0; font-size: 12px; margin-bottom: 12px; }
+        .dash-card { padding: 1.2rem !important; border-radius: 1.5rem !important; border-bottom-width: 4px !important; }
+        .mobile-claim-card { display: block; margin-bottom: 15px; padding: 20px; border-radius: 1.5rem; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); }
+        @media (min-width: 768px) { .mobile-claim-card { display: none; } }
+
+        #reportModal, #linksModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.97); z-index: 2000; padding: 15px; overflow-y: auto; }
+        .modal-content { background: white; color: black; max-width: 850px; margin: 0 auto; padding: 30px; border-radius: 2rem; }
+
+        @media print {
+            body * { visibility: hidden !important; }
+            #reportModal, #reportModal *, #reportSheet, #reportSheet * { visibility: visible !important; }
+            #reportModal { position: absolute; left: 0; top: 0; width: 100%; background: white !important; display: block !important; padding: 0 !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="toast-container" class="fixed bottom-5 right-5 z-[3000] flex flex-col gap-2"></div>
+    <div id="overlay" class="overlay" onclick="toggleMenu()"></div>
+
+    <header id="mobile-header" class="glass sticky top-0 z-[800] p-4 flex justify-between items-center no-print">
+        <div class="flex items-center gap-3">
+            <img src="https://www.horspowercarrental.com/hp-logo.jpg" class="h-8 rounded shadow">
+            <h1 class="text-lg font-black italic text-sky-400">Horspower</h1>
+        </div>
+        <button onclick="toggleMenu()" class="text-3xl p-1">☰</button>
+    </header>
+
+    <aside id="sidebar" class="glass flex flex-col p-8 no-print">
+        <div class="mb-10 text-center lg:text-left">
+            <img src="https://www.horspowercarrental.com/hp-logo.jpg" class="h-12 mx-auto lg:mx-0 mb-4 rounded shadow-xl">
+            <h1 class="text-xl font-black italic text-sky-400 uppercase leading-none">Hpower PRO</h1>
+            <p class="text-[9px] text-gray-500 font-bold mt-1 uppercase italic tracking-widest">v17.3 Hybrid</p>
+        </div>
+        <nav class="flex-1">
+            <div onclick="showView('dashboard')" class="sidebar-item active" id="btn-dashboard">📊 Dashboard</div>
+            <div onclick="prepareNewClaim()" class="sidebar-item" id="btn-claim">📝 Add New Claim</div>
+            <div onclick="showView('list')" class="sidebar-item" id="btn-list">📋 Management List</div>
+        </nav>
+    </aside>
+
+    <main>
+        <section id="view-dashboard" class="view active">
+            <h2 class="text-2xl lg:text-4xl font-black italic uppercase mb-6 text-sky-400">Analytics</h2>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+                <div class="glass dash-card border-yellow-500 text-center"><p class="text-[9px] font-bold text-gray-400 uppercase">Pending</p><h3 id="dash-pending" class="text-xl font-black text-white">0</h3></div>
+                <div class="glass dash-card border-green-500 text-center"><p class="text-[9px] font-bold text-gray-400 uppercase">Paid</p><h3 id="dash-paid-count" class="text-xl font-black text-green-400">0</h3></div>
+                <div class="glass dash-card border-red-500 text-center"><p class="text-[9px] font-bold text-gray-400 uppercase">Unpaid</p><h3 id="dash-unpaid-count" class="text-xl font-black text-red-400">0</h3></div>
+                <div class="glass dash-card border-purple-500 text-center"><p class="text-[9px] font-bold text-gray-400 uppercase">Recovered</p><h3 id="dash-paid-sum" class="text-xl font-black text-white">$0</h3></div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="glass p-6 rounded-[2rem] flex flex-col items-center"><canvas id="chartLoc" class="max-h-48 w-full"></canvas></div>
+                <div class="glass p-6 rounded-[2rem] flex flex-col items-center"><canvas id="chartStatus" class="max-h-48 w-full"></canvas></div>
+            </div>
+        </section>
+
+        <section id="view-claim" class="view">
+            <h2 id="form-title" class="text-2xl lg:text-4xl font-black italic uppercase mb-6 text-sky-400">Registry</h2>
+            <form id="claimForm" class="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-24">
+                <input type="hidden" id="claim-id">
+                
+                <div class="glass p-6 lg:p-10 rounded-[2.5rem] space-y-4">
+                    <h4 class="text-sky-400 font-bold text-xs uppercase tracking-widest">Area 1: Context</h4>
+                    <input type="text" id="contrato" placeholder="Contract ID #" required>
+                    <select id="location" required><option value="">-- City --</option><option value="Miami">Miami</option><option value="Charlotte">Charlotte</option><option value="Nashville">Nashville</option></select>
+                    <input type="text" id="rentador" placeholder="Client Name" required>
+                    <div class="flex items-center gap-4"><label class="text-[10px] font-bold text-sky-400 uppercase italic">Date:</label><input type="date" id="fecha_incidente" required></div>
+                    <textarea id="descripcion" rows="3" placeholder="Technical details..."></textarea>
+                </div>
+
+                <div class="glass p-6 lg:p-10 rounded-[2.5rem] space-y-4">
+                    <h4 class="text-sky-400 font-bold text-xs uppercase tracking-widest">Area 2: Asset</h4>
+                    <input type="text" id="vin" placeholder="VIN Number">
+                    <div class="grid grid-cols-3 gap-2">
+                        <input type="text" id="marca" placeholder="Make"><input type="text" id="modelo" placeholder="Model"><input type="number" id="ano" placeholder="Year">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <select id="status">
+                            <option value="Pendiente">PENDING</option>
+                            <option value="Pagado">PAID</option>
+                            <option value="No Pagado">UNPAID</option>
+                        </select>
+                        <input type="number" id="estimado" placeholder="Amount ($)">
+                    </div>
+                </div>
+
+                <div class="glass p-6 lg:p-10 rounded-[2.5rem] space-y-4 lg:col-span-2">
+                    <h4 class="text-sky-400 font-bold text-xs uppercase tracking-widest">History & Evidence</h4>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div>
+                            <textarea id="nuevo_gmail" rows="3" placeholder="Paste communication body..."></textarea>
+                            <button type="button" onclick="addGmail()" class="w-full bg-white/10 p-2 rounded-xl mt-2 font-bold text-[10px] uppercase hover:bg-sky-500 hover:text-black transition">+ Add Entry</button>
+                            <div id="gmailLog" class="mt-4"></div>
+                        </div>
+                        <div>
+                            <input type="file" id="fotos_input" multiple class="hidden" onchange="previewImages(this.files)">
+                            <label for="fotos_input" class="block border-2 border-dashed border-white/10 p-10 rounded-2xl text-center cursor-pointer hover:bg-white/5 transition"><span class="text-3xl">📸</span><p class="text-[10px] font-bold uppercase mt-2">Upload Evidence</p></label>
+                            <div id="preview" class="grid grid-cols-4 gap-2 mt-4"></div>
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" id="btnSave" class="lg:col-span-2 bg-sky-500 hover:bg-sky-400 text-black font-black py-6 rounded-[2rem] shadow-2xl uppercase tracking-widest text-lg transition-all">Synchronize Cloud Hpower</button>
+            </form>
+        </section>
+
+        <section id="view-list" class="view">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
+                <h2 class="text-2xl lg:text-4xl font-black italic uppercase text-sky-400">Management List</h2>
+                <input type="text" id="search" placeholder="Search by Contract, Name or VIN..." onkeyup="filterClaims()" class="md:w-80">
+            </div>
+            <div id="listContainer">
+                <div class="hidden md:block glass rounded-[2rem] overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-white/5 text-[10px] font-black uppercase text-sky-400 tracking-widest">
+                            <tr><th class="p-6">Contract / Client</th><th>Date</th><th>Location</th><th>Unit / VIN</th><th>Status</th><th>Amount</th><th>Updated</th><th class="text-right p-6">Actions</th></tr>
+                        </thead>
+                        <tbody id="claimTableBody" class="text-xs"></tbody>
+                    </table>
+                </div>
+                <div id="mobileCards" class="md:hidden space-y-4"></div>
+            </div>
+        </section>
+    </main>
+
+    <div id="linksModal"><div class="modal-content"><h2 class="text-2xl font-black mb-6 italic">Evidence Links</h2><div id="linksList" class="space-y-2 font-mono text-[10px] break-all bg-gray-50 p-4 rounded-xl border"></div><button onclick="document.getElementById('linksModal').style.display='none'" class="mt-6 w-full bg-black text-white p-4 rounded-xl font-black uppercase text-xs">Close</button></div></div>
+    <div id="reportModal">
+        <div class="max-w-[850px] mx-auto flex justify-end gap-3 mb-4 no-print">
+            <button onclick="document.getElementById('reportModal').style.display='none'" class="bg-red-500 text-white px-5 py-2 rounded-xl font-bold text-[10px] uppercase">Close</button>
+            <button onclick="window.print()" class="bg-sky-500 text-black px-5 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest">Print PDF</button>
+        </div>
+        <div id="reportSheet" class="modal-content !text-black !bg-white shadow-2xl"></div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://tvrvazripqfatkkisijq.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2cnZhenJpcHFmYXRra2lzaWpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxNDI4NTUsImV4cCI6MjA4NzcxODg1NX0.pVf0LO0_t8_6w_WhGa4wFhiFeDUDZjEsDpnSyliZKp4";
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        let activeLogs = []; let allClaims = []; let tempFiles = []; let currentPhotos = []; let locChart, statusChart;
+
+        function toggleMenu() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('overlay').classList.toggle('active'); }
+        function showToast(m, err=false) { const c = document.getElementById('toast-container'); const t = document.createElement('div'); t.className = `p-4 rounded-xl border glass font-bold text-xs ${err?'border-red-500 text-red-400':'border-sky-400 text-sky-400'}`; t.innerText = m; c.appendChild(t); setTimeout(() => t.remove(), 4000); }
+        function showView(n) { document.querySelectorAll('.view').forEach(v => v.classList.remove('active')); document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active')); document.getElementById(`view-${n}`).classList.add('active'); if(document.getElementById(`btn-${n}`)) document.getElementById(`btn-${n}`).classList.add('active'); if(n === 'dashboard') updateDashboard(); if(n === 'list') fetchClaims(); }
+        function prepareNewClaim() { resetForm(); document.getElementById('form-title').innerText = "New Claim Entry"; showView('claim'); }
+
+        async function updateDashboard() {
+            let { data } = await _supabase.from('reclamos').select('*'); if(!data) return;
+            const pending = data.filter(c => c.status === 'Pendiente');
+            const paid = data.filter(c => c.status === 'Pagado');
+            const unpaid = data.filter(c => c.status === 'No Pagado');
+
+            document.getElementById('dash-pending').innerText = pending.length;
+            document.getElementById('dash-paid-count').innerText = paid.length;
+            document.getElementById('dash-unpaid-count').innerText = unpaid.length;
+            document.getElementById('dash-paid-sum').innerText = `$${paid.reduce((s,c) => s+(Number(c.estimado)||0),0).toLocaleString()}`;
+            
+            const locData = data.reduce((acc, c) => { if(c.location) acc[c.location] = (acc[c.location] || 0) + 1; return acc; }, {});
+            
+            if(locChart) locChart.destroy(); if(statusChart) statusChart.destroy();
+            
+            locChart = new Chart(document.getElementById('chartLoc'), { 
+                type: 'doughnut', 
+                data: { labels: Object.keys(locData), datasets: [{ data: Object.values(locData), backgroundColor: ['#38bdf8', '#818cf8', '#fbbf24', '#f472b6'] }] },
+                options: { plugins: { legend: { position: 'bottom', labels: { color: '#fff', font: { size: 10 } } } } }
+            });
+            
+            statusChart = new Chart(document.getElementById('chartStatus'), { 
+                type: 'bar', 
+                data: { labels: ['Pending', 'Paid', 'Unpaid'], datasets: [{ data: [pending.length, paid.length, unpaid.length], backgroundColor: ['#fbbf24', '#22c55e', '#ef4444'] }] },
+                options: { plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#fff' } }, x: { ticks: { color: '#fff' } } } }
+            });
+        }
+
+        function addGmail() { const v = document.getElementById('nuevo_gmail').value; if(!v) return; activeLogs.unshift({ date: new Date().toLocaleString(), text: v }); document.getElementById('nuevo_gmail').value = ""; renderLogs(); }
+        function renderLogs() { document.getElementById('gmailLog').innerHTML = activeLogs.map(l => `<div class="log-entry"><span class="text-sky-400 font-bold block mb-2 text-[10px] underline">${l.date}</span><div class="text-white/90 whitespace-pre-wrap">${l.text}</div></div>`).join(''); }
+        function previewImages(f) { tempFiles = Array.from(f); document.getElementById('preview').innerHTML = tempFiles.map(i => `<img src="${URL.createObjectURL(i)}" class="h-12 w-full object-cover rounded-lg border border-white/10">`).join(''); }
+        function surgicalDate(dStr) { if(!dStr) return 'N/A'; const clean = dStr.split('T')[0]; const [y, m, d] = clean.split('-'); return `${m}-${d}-${y}`; }
+
+        document.getElementById('claimForm').addEventListener('submit', async (e) => {
+            e.preventDefault(); const btn = document.getElementById('btnSave'); const id = document.getElementById('claim-id').value;
+            btn.innerText = "SYNCING...";
+            
+            let nU = [];
+            for (let f of tempFiles) {
+                const p = `claims/${Date.now()}_${f.name}`;
+                const { data } = await _supabase.storage.from('evidencia-claims').upload(p, f);
+                if(data) nU.push(_supabase.storage.from('evidencia-claims').getPublicUrl(p).data.publicUrl);
+            }
+
+            const payload = {
+                rentador: document.getElementById('rentador').value, contrato: document.getElementById('contrato').value,
+                location: document.getElementById('location').value, fecha_incidente: document.getElementById('fecha_incidente').value,
+                descripcion: document.getElementById('descripcion').value, vin: document.getElementById('vin').value,
+                marca: document.getElementById('marca').value, modelo: document.getElementById('modelo').value,
+                ano: Number(document.getElementById('ano').value), status: document.getElementById('status').value,
+                estimado: Number(document.getElementById('estimado').value) || 0, historial_gmail: activeLogs, fotos: [...currentPhotos, ...nU]
+            };
+
+            if (id) payload.updated_at = new Date().toISOString();
+            const { error } = id ? await _supabase.from('reclamos').update(payload).eq('id', id) : await _supabase.from('reclamos').insert([payload]);
+            if(error) showToast(error.message, true); else { showToast("Cloud Synchronized!"); resetForm(); showView('list'); }
+            btn.innerText = "Synchronize Cloud Hpower";
+        });
+
+        async function fetchClaims() { const { data } = await _supabase.from('reclamos').select('*').order('created_at', {ascending: false}); allClaims = data || []; renderTable(allClaims); }
+        
+        function renderTable(d) {
+            let tH = ""; let cH = "";
+            d.forEach(c => {
+                const date = surgicalDate(c.fecha_incidente);
+                const amt = `$${(Number(c.estimado)||0).toLocaleString()}`;
+                
+                let sClass = 'bg-gray-500/20 text-gray-400';
+                if(c.status === 'Pagado') sClass = 'bg-green-500/20 text-green-400';
+                else if(c.status === 'Pendiente') sClass = 'bg-yellow-500/20 text-yellow-400';
+                else if(c.status === 'No Pagado') sClass = 'bg-red-500/20 text-red-400';
+
+                tH += `<tr class="border-b border-white/5 hover:bg-white/5 transition">
+                    <td class="p-6"><b># ${c.contrato}</b><br><small class="text-sky-400 font-bold">${c.rentador}</small></td>
+                    <td class="p-6">${date}</td><td class="p-6 uppercase font-bold text-gray-400">${c.location}</td>
+                    <td>${c.marca} ${c.modelo}<br><small class="text-gray-500 font-bold">${c.vin || 'NO VIN'}</small></td>
+                    <td><span class="px-3 py-1 rounded-full text-[9px] font-black uppercase ${sClass}">${c.status}</span></td>
+                    <td class="font-mono text-sky-400">${amt}</td>
+                    <td class="p-6 text-[9px] text-gray-400 font-mono">${c.updated_at ? new Date(c.updated_at).toLocaleString('en-US', {month:'2-digit',day:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '<span class="text-gray-600 italic">—</span>'}</td>
+                    <td class="p-6 text-right space-x-2">
+                        <button onclick="editClaim('${c.id}')" class="bg-sky-500/10 text-sky-400 border border-sky-400/20 px-3 py-1 rounded-lg text-[9px] uppercase">Edit</button>
+                        <button onclick="openReport('${c.id}')" class="bg-sky-500 text-black px-3 py-1 rounded-lg text-[9px] font-bold uppercase">Report</button>
+                    </td>
+                </tr>`;
+
+                cH += `<div class="mobile-claim-card glass">
+                    <div class="flex justify-between mb-4">
+                        <div><span class="text-sky-400 font-black"># ${c.contrato}</span><h3 class="text-xs">${c.rentador}</h3></div>
+                        <span class="px-3 py-1 h-fit rounded-full text-[9px] font-black uppercase ${sClass}">${c.status}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-[10px] mb-4">
+                        <div><p class="text-gray-500 uppercase">Unit</p><p>${c.marca} ${c.modelo}</p></div>
+                        <div><p class="text-gray-500 uppercase">Amount</p><p class="text-sky-400 font-bold">${amt}</p></div>
+                    </div>
+                    <div class="flex gap-2 justify-end pt-3 border-t border-white/5">
+                        <button onclick="showLinks('${c.id}')" class="bg-purple-600/20 text-purple-400 px-3 py-2 rounded-xl text-[9px] font-black uppercase">Links</button>
+                        <button onclick="editClaim('${c.id}')" class="bg-sky-500/10 text-sky-400 px-3 py-2 rounded-xl text-[9px] font-black uppercase">Edit</button>
+                        <button onclick="openReport('${c.id}')" class="bg-sky-500 text-black px-3 py-2 rounded-xl text-[9px] font-black uppercase">Report</button>
+                    </div>
+                </div>`;
+            });
+            document.getElementById('claimTableBody').innerHTML = tH;
+            document.getElementById('mobileCards').innerHTML = cH;
+        }
+
+        function filterClaims() { const t = document.getElementById('search').value.toLowerCase(); renderTable(allClaims.filter(c => c.rentador.toLowerCase().includes(t) || (c.vin && c.vin.toLowerCase().includes(t)) || c.contrato.toLowerCase().includes(t))); }
+        
+        function editClaim(id) {
+            const c = allClaims.find(x => x.id === id); 
+            document.getElementById('claim-id').value = c.id; 
+            document.getElementById('rentador').value = c.rentador; 
+            document.getElementById('contrato').value = c.contrato; 
+            document.getElementById('location').value = c.location;
+            document.getElementById('fecha_incidente').value = c.fecha_incidente ? c.fecha_incidente.substring(0,10) : ""; 
+            document.getElementById('descripcion').value = c.descripcion; 
+            document.getElementById('vin').value = c.vin;
+            document.getElementById('marca').value = c.marca; 
+            document.getElementById('modelo').value = c.modelo; 
+            document.getElementById('ano').value = c.ano; 
+            document.getElementById('status').value = c.status; 
+            document.getElementById('estimado').value = c.estimado;
+            activeLogs = c.historial_gmail || []; 
+            currentPhotos = c.fotos || []; 
+            renderLogs(); 
+            document.getElementById('form-title').innerText = "Edit Incident"; 
+            showView('claim');
+        }
+
+        function showLinks(id) { 
+            const c = allClaims.find(x => x.id === id); 
+            const u = c.fotos || []; 
+            document.getElementById('linksList').innerHTML = u.length > 0 ? u.map(i => `<div class="p-2 bg-white rounded-lg mb-1 select-all text-[9px] border break-all text-black">${i}</div>`).join('') : "No photos."; 
+            document.getElementById('linksModal').style.display = 'block'; 
+        }
+
+        function openReport(id) {
+            const c = allClaims.find(x => x.id === id); if(!c) return;
+            const fH = (c.fotos || []).map(u => `<img src="${u}" style="width:100%; border-radius:15px; margin-bottom:15px; border:1px solid #eee;">`).join('');
+            document.getElementById('reportSheet').innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:5px solid #000; padding-bottom:20px; margin-bottom:30px;">
+                    <img src="https://www.horspowercarrental.com/hp-logo.jpg" style="height:60px;">
+                    <h1 style="font-size:24px; font-weight:900;">INCIDENT REPORT</h1>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; font-size:12px; margin-bottom:20px;">
+                    <div><b>CONTRACT:</b> ${c.contrato}<br><b>CLIENT:</b> ${c.rentador}<br><b>LOCATION:</b> ${c.location}</div>
+                    <div><b>VIN:</b> ${c.vin || 'N/A'}<br><b>UNIT:</b> ${c.marca} ${c.modelo}<br><b>STATUS:</b> ${c.status}</div>
+                </div>
+                <div style="background:#f4f4f4; padding:15px; border-radius:10px; margin-bottom:20px;">
+                    <b>DESCRIPTION:</b><br>${c.descripcion || 'N/A'}
+                </div>
+                <div><b>EVIDENCE:</b><br>${fH || 'No images provided.'}</div>
+            `;
+            document.getElementById('reportModal').style.display = 'block';
+        }
+
+        function resetForm() { document.getElementById('claimForm').reset(); document.getElementById('claim-id').value = ""; activeLogs = []; tempFiles = []; currentPhotos = []; document.getElementById('gmailLog').innerHTML = ""; document.getElementById('preview').innerHTML = ""; }
+        window.onload = () => showView('dashboard');
+    </script>
+</body>
+</html>
